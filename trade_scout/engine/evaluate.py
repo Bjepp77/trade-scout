@@ -148,23 +148,37 @@ def evaluate_trade(
     sleeper,
     cfg: AppConfig | None = None,
     display_name: str = "",
+    *,
+    snapshots: dict | None = None,
+    source_errors: dict | None = None,
+    matcher: NameMatcher | None = None,
+    flock_data: dict | None = None,
+    include_roster_context: bool = True,
 ) -> dict:
     """Price one trade under every enabled source. The multi-source verdict.
 
     Raises ValuesError only when NO source could be fetched at all; a partial
     source set is a normal answer with its gaps stated.
+
+    The keyword-only parameters let a caller that prices MANY candidate
+    trades (consult) fetch snapshots and Flock once and reuse them; when they
+    are None this function fetches its own.
     """
     cfg = cfg or AppConfig.load()
-    matcher = NameMatcher(players_map)
+    matcher = matcher or NameMatcher(players_map)
 
-    import concurrent.futures
+    if snapshots is None:
+        import concurrent.futures
 
-    superflex = int(league.get("num_qbs", 1)) >= 2
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        snaps_future = pool.submit(get_snapshots, league, cfg, matcher)
-        flock_future = pool.submit(_try_flock_rankings, superflex)
-        snapshots, errors = snaps_future.result()
-        flock_data = flock_future.result()
+        superflex = int(league.get("num_qbs", 1)) >= 2
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            snaps_future = pool.submit(get_snapshots, league, cfg, matcher)
+            flock_future = pool.submit(_try_flock_rankings, superflex)
+            snapshots, errors = snaps_future.result()
+            flock_data = flock_future.result()
+    else:
+        errors = dict(source_errors or {})
+        flock_data = flock_data or {}
 
     if not snapshots:
         raise ValuesError(
@@ -262,13 +276,14 @@ def evaluate_trade(
 
     # Roster context runs off the reference source's own records: the same
     # {id: {value: ...}} shape the single-source path fed it.
-    try:
-        roster_context = build_roster_context(
-            sleeper, display_name, players_map, ref_snap.players,
-            give_assets, get_assets)
-    except Exception as e:  # noqa: BLE001 - context is decoration, not verdict
-        log.warning("Roster context failed (non-fatal): %s", e)
-        roster_context = None
+    roster_context = None
+    if include_roster_context:
+        try:
+            roster_context = build_roster_context(
+                sleeper, display_name, players_map, ref_snap.players,
+                give_assets, get_assets)
+        except Exception as e:  # noqa: BLE001 - context is decoration, not verdict
+            log.warning("Roster context failed (non-fatal): %s", e)
 
     source_names = ", ".join(r["display_name"] for r in source_rows.values())
     return {

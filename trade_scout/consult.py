@@ -20,7 +20,6 @@ from trade_scout.name_matcher import NameMatcher
 from trade_scout.report import ClaudeVerdictError, _parse_claude_json, _run_claude
 from trade_scout.sleeper import SleeperClient
 from trade_scout.trade import _classify_team_posture, _try_flock_rankings, format_basis_line
-from trade_scout.values import get_values
 
 log = logging.getLogger(__name__)
 
@@ -511,39 +510,36 @@ def generate_skeletons(
     system_prompt = (
         "You are a dynasty fantasy football trade architect. The OWNER is giving "
         f"{constraint.target_display} to a league partner. Your job is to "
-        "propose 3 concrete trade skeleton options from the partner's roster.\n\n"
+        "propose CANDIDATE trade skeletons from the partner's roster.\n\n"
         "You receive:\n"
         "- The owner's top assets (valued, ranked)\n"
         "- The partner's top assets (valued, ranked)\n"
         "- The owner's team posture\n"
         f"- League format: {format_str}\n\n"
-        "RETURN EXACTLY 3 OPTIONS:\n"
-        "1. BEST DEAL: maximizes value extraction for the owner. Ask for a slight overpay.\n"
-        "2. FAIR DEAL: roughly even value, both sides benefit.\n"
-        "3. STRETCH: aggressive ask that might still fly. Significant overpay for the owner.\n\n"
-        "FLOCK EXPERT RANKINGS (MANDATORY):\n"
-        "- Roster data includes flock_rank (expert consensus rank, SF) and "
-        "flock_tier (S/A/B/C/D/E/F/G/H/I/J/K/L/M/N/O/P/Q/R).\n"
-        "- You MUST cite Flock tier for every player mentioned in every rationale. "
-        "Format: 'Player Name (Flock tier A)' or 'Player Name (Flock tier S, rank 4.2)'.\n"
-        "- If Flock and FantasyCalc disagree on rank by 15+ spots, flag the divergence.\n"
-        "- If flock_rank/flock_tier is missing for a player, note 'unranked by Flock'.\n\n"
+        "RETURN 5 TO 8 CANDIDATES, spanning the range from roughly even to an "
+        "aggressive ask that might still fly. Do NOT estimate values or "
+        "deltas: the engine re-prices every candidate against multiple "
+        "market sources after you, and any number you write will be ignored. "
+        "Propose STRUCTURE and REASONING only.\n\n"
+        "FLOCK EXPERT RANKINGS (when present in the data):\n"
+        "- Roster data may include flock_rank (expert consensus rank) and "
+        "flock_tier.\n"
+        "- Cite the Flock tier for players you mention when it is present, "
+        "e.g. 'Player Name (Flock tier A)'.\n\n"
         "RULES:\n"
         "- Only propose players/picks from the partner's roster in brandon_gets.\n"
         "- brandon_gives MUST include ALL target players the owner is giving up. "
         "Do not drop any. You may add a minor piece (pick, depth player) from "
         "the owner to balance if needed, but prefer simplicity.\n"
         "- Consider positional needs, age curves, team posture alignment.\n"
-        "- value_delta is positive when the owner wins value.\n"
         "- Each rationale is 1-2 sentences. Direct, no fluff, no em dashes.\n"
         "- Draft picks should be formatted as '2026 1st', '2027 2nd', etc.\n\n"
         "Return ONLY valid JSON, no markdown fences, in this exact format:\n"
         "[\n"
-        '  {"label": "BEST DEAL", "brandon_gives": ["Player"], '
-        '"brandon_gets": ["Player", "2026 1st"], "value_delta": 1200, '
+        '  {"brandon_gives": ["Player"], '
+        '"brandon_gets": ["Player", "2026 1st"], '
         '"rationale": "Explanation."},\n'
-        '  {"label": "FAIR DEAL", ...},\n'
-        '  {"label": "STRETCH", ...}\n'
+        '  ...\n'
         "]"
     )
 
@@ -581,6 +577,129 @@ def generate_skeletons(
         raise ClaudeVerdictError("Claude did not return a list of trade options.")
 
     return options
+
+
+def _enumerate_candidates(
+    target_names: list[str],
+    target_value: float,
+    partner_roster: list[dict],
+    max_candidates: int = 40,
+) -> list[dict]:
+    """Deterministic candidate skeletons: no LLM required.
+
+    1-for-N and 2-for-N combinations from the partner's enriched roster whose
+    combined (reference-scale) value lands in a band around the target's
+    value. The band is asymmetric on purpose: asking for a modest overpay is
+    the point of a consult, giving one away is not.
+    """
+    assets = [e for e in partner_roster if float(e.get("value") or 0) > 0]
+    if not assets or target_value <= 0:
+        return []
+    lo, hi = 0.75 * target_value, 1.35 * target_value
+    cands: list[dict] = []
+    for i, a in enumerate(assets):
+        if lo <= a["value"] <= hi:
+            cands.append({
+                "brandon_gives": list(target_names),
+                "brandon_gets": [a["name"]],
+                "rationale": "Single asset in the target's value range.",
+            })
+        for b in assets[i + 1:]:
+            if len(cands) >= max_candidates:
+                return cands
+            v = a["value"] + b["value"]
+            if lo <= v <= hi:
+                cands.append({
+                    "brandon_gives": list(target_names),
+                    "brandon_gets": [a["name"], b["name"]],
+                    "rationale": "Two-piece package in the target's value range.",
+                })
+        if len(cands) >= max_candidates:
+            break
+    return cands
+
+
+# A candidate losing more than this (composite, percent of the larger side)
+# is not an option worth showing; the owner asked how to get PAID for the
+# target, not how to donate it.
+_WILD_LOSS_PCT = -15.0
+
+
+def _reprice_and_rank(
+    candidates: list[dict],
+    *,
+    league: dict,
+    players_map: dict,
+    sleeper,
+    snapshots: dict,
+    source_errors: dict,
+    matcher,
+    flock_data: dict,
+) -> list[dict]:
+    """The gap-closer: every candidate goes back through the ENGINE.
+
+    Whatever proposed the skeleton (LLM or enumerator), its deltas are
+    code-authored here, per source, or the candidate does not survive.
+    Returns up to three, labelled BEST DEAL / FAIR DEAL / STRETCH by their
+    MEASURED composite deltas, each carrying its full evaluation.
+    """
+    from trade_scout.engine.evaluate import evaluate_trade
+    from trade_scout.trade import TradeCommand
+    from trade_scout.values import ValuesError
+
+    repriced: list[dict] = []
+    seen: set[tuple] = set()
+    for cand in candidates:
+        gives = [str(x).strip() for x in (cand.get("brandon_gives") or []) if str(x).strip()]
+        gets = [str(x).strip() for x in (cand.get("brandon_gets") or []) if str(x).strip()]
+        if not gives or not gets:
+            continue
+        key = (tuple(sorted(gives)), tuple(sorted(gets)))
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            ev = evaluate_trade(
+                TradeCommand(give=gives, get=gets), league, players_map,
+                sleeper, snapshots=snapshots, source_errors=source_errors,
+                matcher=matcher, flock_data=flock_data,
+                include_roster_context=False)
+        except ValuesError:
+            continue
+        if ev["unmatched"]:
+            # A skeleton naming an asset nobody can price is not an option;
+            # showing it would put an invented zero into a verdict.
+            continue
+        repriced.append({
+            "brandon_gives": gives, "brandon_gets": gets,
+            "rationale": str(cand.get("rationale") or ""),
+            "evaluation": ev,
+        })
+
+    if not repriced:
+        return []
+
+    def _pct(c: dict) -> float:
+        ev = c["evaluation"]
+        return ev["delta"] / max(ev["give_total"], ev["get_total"], 1) * 100
+
+    repriced.sort(key=lambda c: c["evaluation"]["delta"], reverse=True)
+    kept = [c for c in repriced if _pct(c) > _WILD_LOSS_PCT] or repriced[:3]
+
+    # STRETCH is the most aggressive surviving ask, FAIR the closest to even,
+    # BEST the strongest of what remains.
+    stretch = kept[0]
+    rest = [c for c in kept[1:]]
+    fair = min(rest, key=lambda c: abs(c["evaluation"]["delta"])) if rest else None
+    best = next((c for c in rest if c is not fair), None)
+
+    out: list[dict] = []
+    for label, cand in (("BEST DEAL", best), ("FAIR DEAL", fair), ("STRETCH", stretch)):
+        if cand is not None:
+            out.append({**cand, "label": label})
+    if len(out) == 1:
+        out[0]["label"] = "BEST DEAL"
+    return out
 
 
 def _try_flock_calculator(
@@ -636,21 +755,25 @@ def _format_reply(
         label = opt.get("label", labels[i] if i < len(labels) else f"OPTION {i + 1}")
         gives = opt.get("brandon_gives", [])
         gets = opt.get("brandon_gets", [])
-        delta = opt.get("value_delta", 0)
         rationale = opt.get("rationale", "")
-
-        # Format delta with sign and percentage hint
-        if delta > 0:
-            delta_str = f"+{delta:,} (you win)"
-        elif delta < 0:
-            delta_str = f"{delta:,} (you lose)"
-        else:
-            delta_str = "0 (even)"
+        ev = opt.get("evaluation") or {}
 
         lines.append(f"{i + 1}. {label}")
         lines.append(f"Give: {', '.join(gives)}")
         lines.append(f"Get: {', '.join(gets)}")
-        lines.append(f"Delta: {delta_str}")
+        if ev:
+            # Deltas are ENGINE-measured, never generator-authored.
+            delta = ev["delta"]
+            arrow = ("you win" if ev["winner"] == "GET"
+                     else "you lose" if ev["winner"] == "GIVE" else "even")
+            lines.append(
+                f"Delta: {delta:+,.0f} ({ev['pct_gap']}, {arrow}) -- "
+                f"{ev['consensus']['summary']}")
+            per = ", ".join(
+                f"{row['display_name']} {row['delta']:+,.0f}"
+                for row in ev.get("sources", {}).values())
+            if per:
+                lines.append(f"Sources: {per}")
 
         # Flock calculator verdict for this option
         if flock_calc_results and i < len(flock_calc_results):
@@ -773,13 +896,23 @@ def run_consult(chat_id: str, text: str) -> None:
         return
     partner_display, partner_pids = partner_result
 
-    # Parallel fetch: values + flock
+    # Parallel fetch, ONCE for the whole consult: every candidate trade is
+    # priced against these same snapshots, not a refetch per candidate.
+    from trade_scout.values import get_snapshots
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        values_future = pool.submit(get_values, league)
+        snaps_future = pool.submit(get_snapshots, league, None, matcher)
         flock_future = pool.submit(
             _try_flock_rankings, int(league.get('num_qbs', 1)) >= 2)
-        values_data = values_future.result()
+        snapshots, source_errors = snaps_future.result()
         flock_data = flock_future.result()
+
+    if not snapshots:
+        send_message(chat_id, "No value source could be fetched: " + "; ".join(
+            f"{k}: {v}" for k, v in source_errors.items()))
+        return
+    # Reference-source records, for enrichment and posture (same shape the
+    # single-source path used).
+    values_data = next(iter(snapshots.values())).players
 
     flock_available = bool(flock_data)
 
@@ -790,19 +923,16 @@ def run_consult(chat_id: str, text: str) -> None:
     # The owner's team posture
     brandon_posture = _build_posture(brandon_pids, players_map, values_data)
 
-    # Determine source and as_of from values data
-    source = "FantasyCalc"
-    for record in values_data.values():
-        src = record.get("source")
-        if src:
-            source = src
-            break
+    source = ", ".join(sn.display_name for sn in snapshots.values())
     as_of = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     format_str = league.get("format_str", "SF / 12-team / PPR")
 
-    # Generate trade skeletons via Claude
+    # Generate candidate skeletons: Claude when available, a deterministic
+    # enumerator when not. Either way the ENGINE prices them next; the
+    # generator's job is structure, never numbers.
+    used_enumerator = False
     try:
-        options = generate_skeletons(
+        candidates = generate_skeletons(
             constraint=constraint,
             brandon_roster=brandon_roster,
             partner_roster=partner_roster,
@@ -811,7 +941,29 @@ def run_consult(chat_id: str, text: str) -> None:
             flock_available=flock_available,
         )
     except ClaudeVerdictError as e:
-        send_message(chat_id, f"Couldn't generate trade options: {e}")
+        log.warning("Skeleton generation via Claude failed (%s); enumerating", e)
+        used_enumerator = True
+        target_value = 0.0
+        for target in constraint.target_players:
+            pid = matcher.match(target)
+            if pid and pid in values_data:
+                target_value += float(values_data[pid].get("value") or 0)
+        candidates = _enumerate_candidates(
+            constraint.target_players, target_value, partner_roster)
+    if not candidates:
+        send_message(chat_id, "Couldn't generate any trade candidates for "
+                              f"{constraint.target_display}.")
+        return
+
+    options = _reprice_and_rank(
+        candidates, league=league, players_map=players_map, sleeper=sleeper,
+        snapshots=snapshots, source_errors=source_errors, matcher=matcher,
+        flock_data=flock_data)
+    if not options:
+        send_message(chat_id,
+                     "No candidate survived pricing (unmatched assets or "
+                     "every option loses badly). Try a different target or "
+                     "partner.")
         return
 
     # Run Flock trade calculator on each skeleton (non-fatal)
@@ -824,8 +976,11 @@ def run_consult(chat_id: str, text: str) -> None:
     )
 
     notes: list[str] = []
+    if used_enumerator:
+        notes.append("AI skeleton generation unavailable; candidates were "
+                     "enumerated from roster values.")
     if not flock_available:
-        notes.append("Flock rankings unavailable, using FantasyCalc only.")
+        notes.append("Flock rankings unavailable.")
     if flock_calc_results is None:
         notes.append("Flock calculator unavailable.")
     if notes:
