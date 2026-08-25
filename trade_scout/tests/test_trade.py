@@ -59,11 +59,18 @@ class TestParseTradeCommand:
         with pytest.raises(TradeParseError, match="Empty"):
             parse_trade_command("")
 
-    def test_empty_after_slash_falls_to_claude(self):
-        """'/trade' with no body falls to Claude, which raises on empty."""
+    def test_empty_after_slash_without_llm_hints_the_grammar(self):
+        """'/trade' with no body falls to the NL path, which without an LLM
+        answers with the structured-grammar hint."""
+        with pytest.raises(TradeParseError, match="give: Player1"):
+            parse_trade_command("/trade")
+
+    def test_empty_after_slash_with_a_broken_cli_still_errors(self):
         from unittest.mock import patch
 
-        with patch("trade_scout.trade.subprocess.run", side_effect=FileNotFoundError):
+        with patch("trade_scout.llm.llm_available", return_value=True), \
+                patch("trade_scout.trade.subprocess.run",
+                      side_effect=FileNotFoundError):
             with pytest.raises(TradeParseError, match="Couldn't understand"):
                 parse_trade_command("/trade")
 

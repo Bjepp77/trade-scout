@@ -138,6 +138,14 @@ def _parse_with_claude(text: str) -> TradeCommand:
 
     log = logging.getLogger(__name__)
 
+    from trade_scout.llm import llm_available
+
+    if not llm_available():
+        raise TradeParseError(
+            "Couldn't parse that as a trade (and no AI is available for "
+            "natural language). Use the structured format: "
+            "/trade give: Player1 | get: Player2")
+
     from trade_scout.config import known_league_shorts, league_prompt_hint
 
     hint = league_prompt_hint()

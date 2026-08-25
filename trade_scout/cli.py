@@ -39,12 +39,8 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
     from trade_scout.consult import is_consult_command, run_consult
     from trade_scout.delivery import send_message
     from trade_scout.engine.evaluate import evaluate_trade, format_source_table
-    from trade_scout.report import (
-        ClaudeAuthError,
-        ClaudeVerdictError,
-        check_claude_auth,
-        generate_verdict,
-    )
+    from trade_scout.llm import llm_available
+    from trade_scout.report import ClaudeVerdictError, generate_verdict
     from trade_scout.sleeper import SleeperClient, SleeperError
     from trade_scout.trade import (
         TradeParseError,
@@ -61,12 +57,6 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
         if is_consult_command(text):
             run_consult(chat_id, text)
             return 0
-
-        try:
-            check_claude_auth()
-        except ClaudeAuthError as e:
-            _send_error(chat_id, str(e))
-            return 1
 
         try:
             trade = parse_trade_command(text)
@@ -120,16 +110,20 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
             league_name=league_cfg["league_name"],
         )
 
-        try:
-            verdict_text = generate_verdict(math_result)
-        except ClaudeVerdictError:
-            # Invariant: numeric summary without narrative rather than nothing.
+        verdict_text = None
+        if llm_available():
+            try:
+                verdict_text = generate_verdict(math_result)
+            except ClaudeVerdictError:
+                log.warning("Claude verdict failed; sending numeric summary")
+        if verdict_text is None:
+            # Invariant: numeric summary without narrative rather than
+            # nothing. The source table below is the real verdict anyway.
             verdict_text = (
                 f"Composite: give {math_result['give_total']} | "
                 f"get {math_result['get_total']} | "
                 f"delta {math_result['delta']:+.0f} ({math_result['pct_gap']})"
             )
-            log.warning("Claude verdict failed; sending numeric summary")
 
         table = format_source_table(math_result)
 

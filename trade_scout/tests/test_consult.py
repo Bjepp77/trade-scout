@@ -138,9 +138,16 @@ class TestParseConsultCommand:
         with pytest.raises(ConsultParseError, match="Empty"):
             parse_consult_command("")
 
-    def test_no_wants_falls_to_claude(self):
-        """If structured parse fails, falls to Claude NL parse."""
-        with patch("trade_scout.consult.subprocess.run", side_effect=FileNotFoundError):
+    def test_no_wants_without_llm_hints_the_grammar(self):
+        """If structured parse fails and no LLM exists, the error teaches
+        the structured format instead of failing opaquely."""
+        with pytest.raises(ConsultParseError, match="/consult"):
+            parse_consult_command("/consult something weird")
+
+    def test_no_wants_with_a_broken_cli_still_errors(self):
+        with patch("trade_scout.llm.llm_available", return_value=True), \
+                patch("trade_scout.consult.subprocess.run",
+                      side_effect=FileNotFoundError):
             with pytest.raises(ConsultParseError, match="Couldn't understand"):
                 parse_consult_command("/consult something weird")
 

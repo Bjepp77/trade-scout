@@ -42,6 +42,22 @@ def _no_env_file():
 
 
 @pytest.fixture(autouse=True)
+def _no_llm(monkeypatch):
+    """The suite runs as if no `claude` CLI exists, on every machine.
+
+    Without this, a developer box with an authenticated CLI would probe it
+    (slow, networked) and run different code paths than CI. Tests that
+    exercise the LLM paths patch trade_scout.llm.llm_available to True and
+    the subprocess underneath.
+    """
+    from trade_scout import llm
+    monkeypatch.setenv("TRADE_SCOUT_LLM", "off")
+    llm.reset()
+    yield
+    llm.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_user_config(monkeypatch, tmp_path):
     """Keep the developer's real ~/.trade-scout/config.json out of tests.
 

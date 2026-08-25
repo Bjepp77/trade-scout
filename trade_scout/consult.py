@@ -310,6 +310,13 @@ def _extract_target_after(text: str) -> str | None:
 
 def _parse_with_claude(text: str) -> ConsultRequest:
     """Use Claude to interpret a natural language consult message."""
+    from trade_scout.llm import llm_available
+
+    if not llm_available():
+        raise ConsultParseError(
+            "Couldn't parse that consult (and no AI is available for natural "
+            "language). Try: /consult <LEAGUE> <partner> wants <player>")
+
     from trade_scout.config import league_prompt_hint
 
     hint = league_prompt_hint()
@@ -505,6 +512,11 @@ def generate_skeletons(
     Returns parsed list of option dicts.
     Raises ClaudeVerdictError if Claude fails.
     """
+    from trade_scout.llm import llm_available
+
+    if not llm_available():
+        raise ClaudeVerdictError("no LLM available for skeleton generation")
+
     format_str = league.get("format_str", "SF / 12-team / PPR")
 
     system_prompt = (
