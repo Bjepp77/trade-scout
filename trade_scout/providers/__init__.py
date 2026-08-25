@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from trade_scout.providers.base import (
     LeagueFormat,
-    SourceDisabled,
     SourceSnapshot,
     config_enabled,
 )
@@ -92,21 +91,21 @@ class KTCSource:
 
 
 class DynastyDaddySource:
-    """Dynasty Daddy's in-house values. Endpoint not yet verified: the site is
-    an SPA whose API routes live in lazily loaded bundles, so this ships
-    disabled until a probed, working endpoint lands. Off by default."""
+    """Dynasty Daddy's in-house values, from the same public unauthenticated
+    endpoint their web frontend uses. Unofficial API: any failure excludes
+    the source for the run, never more."""
 
     key = "dynastydaddy"
     display_name = "Dynasty Daddy"
     requires: tuple[str, ...] = ()
 
     def enabled(self, cfg: "AppConfig") -> bool:
-        return config_enabled(cfg, self.key, default=False)
+        return config_enabled(cfg, self.key, default=True)
 
     def fetch(self, fmt: LeagueFormat) -> SourceSnapshot:
-        raise SourceDisabled(
-            "Dynasty Daddy provider is not implemented yet (their API surface "
-            "is unverified). It is off by default; leave it off.")
+        from trade_scout.providers.dynastydaddy import get_dynastydaddy_snapshot
+
+        return get_dynastydaddy_snapshot(fmt)
 
 
 # Priority order: the first available source is the reference curve.

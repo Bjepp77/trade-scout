@@ -54,8 +54,7 @@ class TestRegistry:
     def test_default_enablement(self):
         cfg = AppConfig()
         on = {s.key for s in REGISTRY if s.enabled(cfg)}
-        assert on == {"fantasycalc", "dynastyprocess", "ktc"}
-        assert "dynastydaddy" not in on  # unverified endpoint ships off
+        assert on == {"fantasycalc", "dynastyprocess", "ktc", "dynastydaddy"}
 
 
 class TestResolveSnapshot:
@@ -109,10 +108,12 @@ class TestGetSnapshots:
              patch.object(REGISTRY_BY_KEY["dynastyprocess"], "fetch",
                           side_effect=SourceError("weekly file gone")), \
              patch.object(REGISTRY_BY_KEY["ktc"], "fetch",
-                          side_effect=SourceError("page changed")):
+                          side_effect=SourceError("page changed")), \
+             patch.object(REGISTRY_BY_KEY["dynastydaddy"], "fetch",
+                          side_effect=SourceError("api gone")):
             snaps, errors = get_snapshots(self._league(), AppConfig())
         assert set(snaps) == {"fantasycalc"}
-        assert set(errors) == {"dynastyprocess", "ktc"}
+        assert set(errors) == {"dynastyprocess", "ktc", "dynastydaddy"}
 
     def test_registry_order_is_preserved_in_results(self):
         with patch.object(REGISTRY_BY_KEY["fantasycalc"], "fetch",
@@ -120,13 +121,16 @@ class TestGetSnapshots:
              patch.object(REGISTRY_BY_KEY["dynastyprocess"], "fetch",
                           return_value=snap("dynastyprocess", "sleeper_id", {})), \
              patch.object(REGISTRY_BY_KEY["ktc"], "fetch",
-                          return_value=snap("ktc", "name", {})):
+                          return_value=snap("ktc", "name", {})), \
+             patch.object(REGISTRY_BY_KEY["dynastydaddy"], "fetch",
+                          return_value=snap("dynastydaddy", "sleeper_id", {})):
             snaps, _ = get_snapshots(self._league(), AppConfig())
-        assert list(snaps) == ["fantasycalc", "dynastyprocess", "ktc"]
+        assert list(snaps) == [
+            "fantasycalc", "dynastyprocess", "ktc", "dynastydaddy"]
 
     def test_disabled_sources_are_not_fetched(self):
         cfg = AppConfig()
-        for key in ("dynastyprocess", "ktc"):
+        for key in ("dynastyprocess", "ktc", "dynastydaddy"):
             cfg.sources[key]["enabled"] = False
         with patch.object(REGISTRY_BY_KEY["fantasycalc"], "fetch",
                           return_value=snap("fantasycalc", "sleeper_id", {})), \
@@ -145,6 +149,8 @@ class TestGetSnapshots:
         with patch.object(REGISTRY_BY_KEY["fantasycalc"], "fetch",
                           side_effect=SourceError("down")), \
              patch.object(REGISTRY_BY_KEY["dynastyprocess"], "fetch",
+                          side_effect=SourceError("down")), \
+             patch.object(REGISTRY_BY_KEY["dynastydaddy"], "fetch",
                           side_effect=SourceError("down")), \
              patch.object(REGISTRY_BY_KEY["ktc"], "fetch", return_value=ktc):
             snaps, _ = get_snapshots(self._league(), AppConfig(),

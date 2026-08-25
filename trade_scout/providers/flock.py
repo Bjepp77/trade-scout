@@ -371,19 +371,33 @@ async def _add_player_to_side(page, search_el, player_name: str) -> bool:
 
 
 async def _select_league(page, league: str) -> None:
-    """Select the correct league in the calculator dropdown."""
+    """Select the correct league in the calculator dropdown.
+
+    Driven by the CONFIGURED league names: the dropdown button shows the
+    currently selected league's name, so it is found by matching any of the
+    user's league names and switched when it is not the requested one.
+    """
+    from trade_scout.config import AppConfig
+
+    cfg = AppConfig.load()
+    entry = cfg.league(league)
+    if entry is None or not entry.name:
+        return
+    # A distinctive prefix, not the full name: Flock may truncate long names
+    # in the button. Quotes stripped because the text goes into a selector.
+    def frag(name: str) -> str:
+        return name.replace('"', "")[:12]
+
+    target = frag(entry.name)
+    known = [frag(e.name) for e in cfg.leagues if e.name]
     try:
         league_btn = await page.query_selector(
-            'button:has-text("Dirty Doz"), button:has-text("Champions")'
-        )
+            ", ".join(f'button:has-text("{n}")' for n in known))
         if league_btn:
-            btn_text = await league_btn.text_content()
-            need_cl = league == "CL"
-            is_cl = "champion" in (btn_text or "").lower()
-            if need_cl != is_cl:
+            btn_text = (await league_btn.text_content()) or ""
+            if target.lower() not in btn_text.lower():
                 await league_btn.click()
                 await page.wait_for_timeout(500)
-                target = "Champions" if need_cl else "Dirty"
                 option = await page.query_selector(
                     f'[role="option"]:has-text("{target}"), '
                     f'li:has-text("{target}"), '

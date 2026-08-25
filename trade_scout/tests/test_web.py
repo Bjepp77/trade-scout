@@ -150,6 +150,8 @@ class TestConsultJob:
 class TestSources:
     def test_sources_page_shows_live_failed_and_disabled(
             self, client, configured, monkeypatch):
+        configured.sources["dynastydaddy"]["enabled"] = False
+        configured.save()
         with patch("trade_scout.sleeper.SleeperClient",
                    side_effect=fake_sleeper_client), \
              patch("trade_scout.values.get_snapshots",

@@ -99,7 +99,7 @@ DEFAULT_SOURCES: dict[str, dict] = {
     "fantasycalc": {"enabled": True, "weight": 1.0},
     "dynastyprocess": {"enabled": True, "weight": 1.0},
     "ktc": {"enabled": True, "weight": 1.0},
-    "dynastydaddy": {"enabled": False, "weight": 1.0},
+    "dynastydaddy": {"enabled": True, "weight": 1.0},
     "flock": {"enabled": "auto"},
 }
 
