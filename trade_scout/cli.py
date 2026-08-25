@@ -38,6 +38,7 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
     from trade_scout.config import get_league_config
     from trade_scout.consult import is_consult_command, run_consult
     from trade_scout.delivery import send_message
+    from trade_scout.engine.evaluate import evaluate_trade, format_source_table
     from trade_scout.report import (
         ClaudeAuthError,
         ClaudeVerdictError,
@@ -47,7 +48,6 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
     from trade_scout.sleeper import SleeperClient, SleeperError
     from trade_scout.trade import (
         TradeParseError,
-        compute_trade_math,
         format_basis_line,
         parse_trade_command,
     )
@@ -102,7 +102,7 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
             return 1
 
         try:
-            math_result = compute_trade_math(
+            math_result = evaluate_trade(
                 trade=trade,
                 league=league,
                 players_map=players_map,
@@ -125,20 +125,22 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
         except ClaudeVerdictError:
             # Invariant: numeric summary without narrative rather than nothing.
             verdict_text = (
-                f"Give total: {math_result['give_total']} | "
-                f"Get total: {math_result['get_total']} | "
-                f"Delta: {math_result['delta']:+d} ({math_result['pct_gap']})"
+                f"Composite: give {math_result['give_total']} | "
+                f"get {math_result['get_total']} | "
+                f"delta {math_result['delta']:+.0f} ({math_result['pct_gap']})"
             )
             log.warning("Claude verdict failed; sending numeric summary")
+
+        table = format_source_table(math_result)
 
         notes: list[str] = []
         if math_result.get("unmatched"):
             notes.append("Couldn't find: " + ", ".join(math_result["unmatched"]))
         if not math_result.get("flock_available"):
-            notes.append("Flock rankings unavailable, using market values only.")
+            notes.append("Flock rankings unavailable.")
         notes_line = "\n" + "\n".join(notes) if notes else ""
 
-        send_message(chat_id, f"{verdict_text}\n\n{basis}{notes_line}")
+        send_message(chat_id, f"{verdict_text}\n\n{table}\n\n{basis}{notes_line}")
         return 0
 
     except Exception:
