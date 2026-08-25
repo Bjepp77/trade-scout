@@ -271,6 +271,43 @@ def fit_factor(position_depth_above_replacement: int,
     return clamp(1.0 - weight * (0.06 * surplus))
 
 
+def blend_market_n(
+    values: dict[str, float | None],
+    weights: dict[str, float],
+) -> tuple[float | None, dict]:
+    """Weight N already-NORMALISED source values into one market number.
+
+    `values` maps source key -> value ON THE SHARED REFERENCE SCALE (i.e.
+    after quantile_normalise); normalisation is deliberately not this
+    function's job. Returns (blended, detail) where detail keeps every
+    per-source value, which sources were present, and the worst pairwise
+    disagreement in percent of the blend -- a single-source player is visibly
+    single-source rather than quietly treated as a consensus.
+    """
+    detail: dict = {"per_source": {}, "sources": [], "disagreement_pct": None}
+    parts: list[tuple[float, float]] = []
+    for key, val in values.items():
+        if val is None:
+            detail["per_source"][key] = None
+            continue
+        w = weights.get(key, 1.0)
+        detail["per_source"][key] = round(val, 1)
+        if w > 0:
+            detail["sources"].append(key)
+            parts.append((val, w))
+    if not parts:
+        return None, detail
+
+    total_w = sum(w for _, w in parts)
+    blended = sum(v * w for v, w in parts) / total_w
+
+    present = [v for v, _ in parts]
+    if len(present) >= 2 and blended > 0:
+        gap = max(present) - min(present)
+        detail["disagreement_pct"] = round(gap / blended * 100, 1)
+    return blended, detail
+
+
 def blend_market(
     fc_value: float | None,
     ktc_value: float | None,

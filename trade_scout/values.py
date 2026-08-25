@@ -1,10 +1,14 @@
 """The ONE seam for values. Nothing else knows where values come from.
 
-get_values(league_settings) -> dict[sleeper_player_id -> ValueRecord]
+get_snapshots(league_settings, cfg, matcher)
+    -> ({source_key: SourceSnapshot}, {source_key: error})
 
-Currently uses FantasyCalc as the sole provider. The seam is here so a future
-provider (KTC, Dynasty Daddy, or a working Flock scraper) can slot in by adding
-a provider to this one file. Nothing else changes.
+Every enabled provider in the registry is fetched concurrently and resolved
+to sleeper_id keys; one failing source is excluded and reported, never fatal.
+This is what the multi-source evaluator consumes.
+
+get_values / get_pick_values are the older single-blend entry points, kept
+for the legacy single-verdict path and the roster board.
 """
 
 from __future__ import annotations
@@ -22,6 +26,59 @@ log = logging.getLogger(__name__)
 
 class ValuesError(Exception):
     """Raised when no provider can supply values."""
+
+
+def get_snapshots(league_settings: dict, cfg=None, matcher=None):
+    """Fetch every enabled value source concurrently.
+
+    Returns (snapshots, errors):
+        snapshots: {source_key: SourceSnapshot}, keyed by sleeper_id when a
+                   NameMatcher is supplied (name-joined sources are resolved
+                   centrally), in REGISTRY priority order.
+        errors:    {source_key: reason} for sources that were enabled but
+                   failed. Failure of one source is never fatal while at
+                   least one other lives; total failure is the caller's
+                   ValuesError to raise if it needs values at all.
+    """
+    import concurrent.futures
+
+    from trade_scout.config import AppConfig
+    from trade_scout.engine.resolve import resolve_snapshot
+    from trade_scout.providers import REGISTRY
+    from trade_scout.providers.base import LeagueFormat, SourceError
+
+    cfg = cfg or AppConfig.load()
+    fmt = LeagueFormat.from_league_settings(league_settings)
+    enabled = [s for s in REGISTRY if s.enabled(cfg)]
+
+    snapshots: dict = {}
+    errors: dict[str, str] = {}
+    if not enabled:
+        return snapshots, errors
+
+    from trade_scout.providers.base import SourceSnapshot
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(enabled)) as pool:
+        futures = {pool.submit(s.fetch, fmt): s for s in enabled}
+        results: dict[str, SourceSnapshot] = {}
+        for future, source in futures.items():
+            try:
+                results[source.key] = future.result()
+            except SourceError as e:
+                errors[source.key] = str(e)
+                log.warning("%s unavailable: %s", source.display_name, e)
+            except Exception as e:  # noqa: BLE001 - a broken provider must not
+                errors[source.key] = f"unexpected: {e}"  # take down the rest
+                log.exception("%s crashed", source.display_name)
+
+    for source in enabled:  # registry order, not completion order
+        snap = results.get(source.key)
+        if snap is None:
+            continue
+        if matcher is not None:
+            snap = resolve_snapshot(snap, matcher)
+        snapshots[source.key] = snap
+    return snapshots, errors
 
 
 def get_values(league_settings: dict) -> dict[str, dict]:

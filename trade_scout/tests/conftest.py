@@ -64,8 +64,8 @@ def _hermetic(monkeypatch):
     """
     monkeypatch.setenv("TRADE_SCOUT_CACHE_DIR", "")
     monkeypatch.setenv("TRADE_SCOUT_HISTORY_DIR", "")
-    from trade_scout.providers import fantasycalc, keeptradecut
-    for mod in (fantasycalc, keeptradecut):
+    from trade_scout.providers import dynastyprocess, fantasycalc, keeptradecut
+    for mod in (fantasycalc, keeptradecut, dynastyprocess):
         memo = getattr(mod, "_MEMO", None)
         if isinstance(memo, dict):
             memo.clear()
@@ -82,6 +82,7 @@ def _no_network(monkeypatch):
         "trade_scout.providers.flock.run_flock_trade_calc",
         "trade_scout.providers.keeptradecut.get_ktc_values",
         "trade_scout.providers.fantasycalc.fantasycalc_provider",
+        "trade_scout.providers.dynastyprocess.get_dynastyprocess_snapshot",
     ):
         module, _, attr = target.rpartition(".")
         try:
