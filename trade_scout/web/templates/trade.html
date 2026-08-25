@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Trade — {{ league.short }}{% endblock %}
+{% block content %}
+<h1>Evaluate a trade <span class="dim">({{ league.name }})</span></h1>
+<div class="panel">
+  <form class="stack" hx-post="/league/{{ league.short }}/trade"
+        hx-target="#result" hx-indicator="#pricing">
+    <label for="give">You give <span class="dim">(comma-separated players
+      and picks, e.g. <code>Bijan Robinson, 2027 1st</code>)</span></label>
+    <input type="text" id="give" name="give" required autocomplete="off">
+    <label for="get">You get</label>
+    <input type="text" id="get" name="get" required autocomplete="off">
+    <button type="submit">Price it</button>
+    <span id="pricing" class="htmx-indicator dim">pricing against all
+      sources…</span>
+  </form>
+</div>
+<div id="result"></div>
+{% endblock %}

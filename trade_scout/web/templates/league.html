@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ league.short }} — Trade Scout{% endblock %}
+{% block content %}
+<h1>{{ league.name }} <span class="dim">({{ league.short }})</span></h1>
+<div class="panel">
+  <p><a href="/league/{{ league.short }}/trade">Evaluate a trade</a> —
+     price any deal under every enabled value source, with a consensus
+     verdict.</p>
+  <p><a href="/league/{{ league.short }}/consult">Trade ideas</a> —
+     name a partner and a player you'd move; get engine-priced options.</p>
+  <p><a href="/league/{{ league.short }}/board">Roster board</a> —
+     every roster priced and scored.</p>
+  <p><a href="/sources">Source status</a> —
+     which calculators are live and how fresh they are.</p>
+</div>
+{% endblock %}

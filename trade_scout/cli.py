@@ -1,5 +1,6 @@
 """Command-line entrypoints.
 
+  trade-scout serve                     run the local web UI (the main way in)
   trade-scout eval <LEAGUE> <text...>   price one trade (or consult) and print
   trade-scout rosters                   dump the priced roster board as JSON
   trade-scout run                       legacy env-driven mode (TEXT/CHAT_ID,
@@ -55,7 +56,7 @@ def process(chat_id: str, text: str, explicit: str | None) -> int:
 
     try:
         if is_consult_command(text):
-            run_consult(chat_id, text)
+            run_consult(chat_id, text, explicit)
             return 0
 
         try:
@@ -235,9 +236,18 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("rosters", help="dump the priced roster board as JSON")
     sub.add_parser("setup", help="interactive first-run league setup")
+    p_serve = sub.add_parser("serve", help="run the local web UI")
+    p_serve.add_argument("--port", type=int, default=8177)
+    p_serve.add_argument("--host", default="127.0.0.1")
     sub.add_parser("run", help="legacy env-driven mode (TEXT/CHAT_ID)")
 
     args = parser.parse_args(argv)
+
+    if args.command == "serve":
+        from trade_scout.web.app import serve
+
+        serve(host=args.host, port=args.port)
+        return
 
     if args.command == "rosters":
         from trade_scout.rosters import run_rosters

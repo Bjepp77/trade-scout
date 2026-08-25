@@ -1,0 +1,29 @@
+{% if error %}
+  <div class="panel"><p class="error">{{ error }}</p></div>
+{% endif %}
+{% if found %}
+<div class="panel">
+  <h2>Leagues for {{ username }}</h2>
+  <form class="stack" method="post" action="/setup/save">
+    <input type="hidden" name="username" value="{{ username }}">
+    <input type="hidden" name="display_name" value="{{ display_name }}">
+    <table>
+      <tr><th></th><th>League</th><th>Shortname</th></tr>
+      {% for lg in found %}
+      <tr>
+        <td><input type="checkbox" name="league_id" value="{{ lg.league_id }}"
+                   checked></td>
+        <td>{{ lg.name }}
+          <input type="hidden" name="name_{{ lg.league_id }}"
+                 value="{{ lg.name }}"></td>
+        <td><input type="text" name="short_{{ lg.league_id }}"
+                   style="width:6rem" placeholder="auto" autocomplete="off"></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="dim">The shortname is how you refer to the league in commands
+    and URLs (e.g. <code>DD</code>).</p>
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endif %}

@@ -1,0 +1,92 @@
+{% if error %}
+  <div class="panel"><p class="error">{{ error }}</p></div>
+{% else %}
+{% set c = result.consensus %}
+<div class="banner {{ 'pass' if c.passes else 'fail' }}">
+  {{ result.composite.winner == 'GET' and 'You win this trade'
+     or result.composite.winner == 'GIVE' and 'You lose this trade'
+     or 'Roughly even' }} —
+  {{ c.summary }} (gate: {{ c.gate }} → {{ 'PASS' if c.passes else 'FAIL' }})
+</div>
+
+<div class="panel scroll">
+  <h2>Per-source verdicts</h2>
+  <table>
+    <tr><th>Source</th><th class="num">You give</th><th class="num">You get</th>
+        <th class="num">Delta</th><th class="num">Gap</th><th>Verdict</th>
+        <th>As of</th><th></th></tr>
+    {% for key, row in result.sources.items() %}
+    <tr>
+      <td>{{ row.display_name }}</td>
+      <td class="num">{{ "{:,.0f}".format(row.give_total) }}</td>
+      <td class="num">{{ "{:,.0f}".format(row.get_total) }}</td>
+      <td class="num">{{ "{:+,.0f}".format(row.delta) }}</td>
+      <td class="num">{{ row.pct_gap }}</td>
+      <td class="{{ 'win' if row.winner == 'GET'
+                    else 'loss' if row.winner == 'GIVE' else 'even' }}">
+        {{ 'WIN' if row.winner == 'GET'
+           else 'LOSS' if row.winner == 'GIVE' else 'EVEN' }}</td>
+      <td class="dim">{{ row.as_of }}
+        {% if row.stale %}<span class="pill stale">stale</span>{% endif %}</td>
+      <td class="dim">{% if row.unmatched %}couldn't price:
+        {{ row.unmatched | join(', ') }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    {% for key, err in result.source_errors.items() %}
+    <tr><td class="dim">{{ key }}</td>
+        <td colspan="7" class="dim">unavailable: {{ err }}</td></tr>
+    {% endfor %}
+    <tr>
+      <td><strong>Composite</strong></td>
+      <td class="num"><strong>{{ "{:,.0f}".format(result.composite.give_total) }}</strong></td>
+      <td class="num"><strong>{{ "{:,.0f}".format(result.composite.get_total) }}</strong></td>
+      <td class="num"><strong>{{ "{:+,.0f}".format(result.composite.delta) }}</strong></td>
+      <td class="num"><strong>{{ result.composite.pct_gap }}</strong></td>
+      <td class="{{ 'win' if result.composite.winner == 'GET'
+                    else 'loss' if result.composite.winner == 'GIVE' else 'even' }}">
+        {{ 'WIN' if result.composite.winner == 'GET'
+           else 'LOSS' if result.composite.winner == 'GIVE' else 'EVEN' }}</td>
+      <td class="dim" colspan="2">normalised blend</td>
+    </tr>
+  </table>
+</div>
+
+<div class="panel scroll">
+  <h2>Assets</h2>
+  <table>
+    <tr><th>Side</th><th>Asset</th><th>Pos</th><th class="num">Age</th>
+      {% for key, row in result.sources.items() %}
+        <th class="num">{{ row.display_name }}</th>
+      {% endfor %}
+      <th>Flock</th></tr>
+    {% for side, label in [(result.give_side, 'give'), (result.get_side, 'get')] %}
+      {% for a in side %}
+      <tr>
+        <td class="dim">{{ label }}</td>
+        <td>{{ a.name }}{% if a.injury_status %}
+          <span class="pill">{{ a.injury_status }}</span>{% endif %}
+          {% if a.pick_basis %}<span class="dim"> ({{ a.pick_basis }})</span>{% endif %}</td>
+        <td class="dim">{{ a.position or ('PICK' if a.is_pick else '?') }}</td>
+        <td class="num dim">{{ a.age or '' }}</td>
+        {% for key in result.sources %}
+          <td class="num">{% if a.per_source[key] is not none
+            %}{{ "{:,.0f}".format(a.per_source[key]) }}{% else %}—{% endif %}</td>
+        {% endfor %}
+        <td class="dim">{% if a.flock_tier %}tier {{ a.flock_tier }}{%
+          if a.flock_rank %}, rk {{ a.flock_rank }}{% endif %}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+  </table>
+  {% if result.unmatched %}
+    <p class="error">Couldn't find: {{ result.unmatched | join(', ') }}</p>
+  {% endif %}
+  {% if not result.flock_available %}
+    <p class="dim">Flock rankings unavailable.</p>
+  {% endif %}
+</div>
+
+<p class="dim">league: {{ result.league_cfg.league_name }} |
+   sources: {{ result.source }} | as of {{ result.as_of }} |
+   {{ result.format_str }}</p>
+{% endif %}

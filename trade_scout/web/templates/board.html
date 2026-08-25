@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Board — {{ league.short }}{% endblock %}
+{% block content %}
+<h1>Roster board <span class="dim">({{ league.name }})</span></h1>
+{% if error %}
+  <div class="panel"><p class="error">{{ error }}</p></div>
+{% elif board %}
+  {% if board.picks_error %}
+    <p class="dim">Draft picks withheld: {{ board.picks_error }}</p>
+  {% endif %}
+  {% for team in board.teams %}
+  <div class="panel scroll">
+    <h2>{{ team.owner }}
+      <span class="dim">{{ team.wins }}-{{ team.losses }}{%
+        if team.ties %}-{{ team.ties }}{% endif %}
+        · score {{ "{:,.0f}".format(team.total_score or 0) }}
+        · market {{ "{:,.0f}".format(team.total_value or 0) }}</span>
+      {% if team.is_owner %}<span class="pill on">you</span>{% endif %}</h2>
+    <table>
+      <tr><th>Player</th><th>Pos</th><th class="num">Age</th>
+          <th class="num">Score</th><th class="num">Market</th>
+          <th>Sources</th><th>Flock</th></tr>
+      {% for p in team.players[:30] %}
+      <tr>
+        <td>{{ p.name }}{% if p.injury_status %}
+          <span class="pill">{{ p.injury_status }}</span>{% endif %}</td>
+        <td class="dim">{{ p.position }}</td>
+        <td class="num dim">{{ p.age or '' }}</td>
+        <td class="num">{{ "{:,.0f}".format(p.score) if p.score else '—' }}</td>
+        <td class="num">{{ "{:,.0f}".format(p.market) if p.market else '—' }}</td>
+        <td class="dim">{{ (p.sources.sources | join(', '))
+                           if p.sources and p.sources.sources else '' }}</td>
+        <td class="dim">{% if p.flock and p.flock.flock_tier
+          %}tier {{ p.flock.flock_tier }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if team.picks %}
+      <p class="dim">Picks:
+        {% for pk in team.picks %}{{ pk.label }}
+          ({{ "{:,.0f}".format(pk.value) if pk.value else 'unpriced' }}){%
+          if not loop.last %}, {% endif %}{% endfor %}
+        — total {{ "{:,.0f}".format(team.pick_value or 0) }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+{% endblock %}

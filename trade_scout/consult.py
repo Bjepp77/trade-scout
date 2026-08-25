@@ -840,8 +840,12 @@ def _find_partner_roster(
     return None
 
 
-def run_consult(chat_id: str, text: str) -> None:
-    """Orchestrator: parse -> fetch -> enrich -> generate -> reply."""
+def run_consult(chat_id: str, text: str, explicit: str | None = None) -> None:
+    """Orchestrator: parse -> fetch -> enrich -> generate -> reply.
+
+    `explicit` is the caller's out-of-band league selection (the web form's
+    league, the legacy TRADE_SCOUT_LEAGUE env when None).
+    """
     try:
         constraint = parse_consult_command(text)
     except ConsultParseError as e:
@@ -850,12 +854,12 @@ def run_consult(chat_id: str, text: str) -> None:
 
     # Load league config
     try:
-        # The caller's explicit selector (the console chip) wins; the text
-        # token is the message path's way of saying the same thing. If
-        # neither named a league, refuse rather than guess: this used to be
-        # inferred from prose and got it wrong on 7 of 9 realistic messages.
+        # The caller's explicit selector wins; the text token is the message
+        # path's way of saying the same thing. If neither named a league,
+        # refuse rather than guess: this used to be inferred from prose and
+        # got it wrong on 7 of 9 realistic messages.
         from trade_scout.config import explicit_league
-        chosen = explicit_league()
+        chosen = explicit if explicit is not None else explicit_league()
         if chosen and constraint.league and chosen != constraint.league:
             raise RuntimeError(
                 f"league conflict: you selected {chosen} but the message says "

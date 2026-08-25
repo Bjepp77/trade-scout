@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Trade Scout{% endblock %}</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    :root {
+      --bg: #101418; --panel: #1a2027; --line: #2a333d;
+      --text: #dfe6ec; --dim: #8a97a3;
+      --win: #4caf7d; --loss: #e06c60; --even: #c9a94e; --accent: #5b9dd9;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+           font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+    a { color: var(--accent); text-decoration: none; }
+    header { display: flex; gap: 1.2rem; align-items: baseline;
+             padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); }
+    header .brand { font-weight: 700; letter-spacing: .3px; }
+    header nav { display: flex; gap: .9rem; flex-wrap: wrap; }
+    main { max-width: 1080px; margin: 0 auto; padding: 1.2rem; }
+    h1 { font-size: 1.25rem; } h2 { font-size: 1.05rem; }
+    .panel { background: var(--panel); border: 1px solid var(--line);
+             border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .35rem .6rem;
+             border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--dim); font-weight: 600; font-size: .82rem;
+         text-transform: uppercase; letter-spacing: .4px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .scroll { overflow-x: auto; }
+    .win  { color: var(--win); font-weight: 600; }
+    .loss { color: var(--loss); font-weight: 600; }
+    .even { color: var(--even); font-weight: 600; }
+    .dim  { color: var(--dim); }
+    .pill { display: inline-block; padding: .05rem .5rem; border-radius: 99px;
+            border: 1px solid var(--line); font-size: .78rem; color: var(--dim); }
+    .pill.on  { color: var(--win); border-color: var(--win); }
+    .pill.off { color: var(--loss); border-color: var(--loss); }
+    .pill.stale { color: var(--even); border-color: var(--even); }
+    form.stack label { display: block; margin: .6rem 0 .2rem; color: var(--dim); }
+    input[type=text], textarea {
+      width: 100%; padding: .5rem .7rem; border-radius: 6px;
+      border: 1px solid var(--line); background: var(--bg); color: var(--text);
+      font: inherit; }
+    button { margin-top: .8rem; padding: .5rem 1.1rem; border-radius: 6px;
+             border: 1px solid var(--accent); background: transparent;
+             color: var(--accent); font: inherit; cursor: pointer; }
+    button:hover { background: var(--accent); color: var(--bg); }
+    .error { color: var(--loss); }
+    .banner { padding: .6rem .9rem; border-radius: 6px; margin: .8rem 0;
+              border: 1px solid; font-weight: 600; }
+    .banner.pass { border-color: var(--win); color: var(--win); }
+    .banner.fail { border-color: var(--loss); color: var(--loss); }
+    pre.reply { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo,
+                monospace; background: var(--bg); padding: .9rem;
+                border-radius: 6px; border: 1px solid var(--line); }
+    .htmx-indicator { opacity: 0; transition: opacity .2s; }
+    .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+  </style>
+</head>
+<body>
+<header>
+  <span class="brand"><a href="/">Trade Scout</a></span>
+  <nav>
+    {% for lg in leagues %}
+      <a href="/league/{{ lg.short }}">{{ lg.short }}</a>
+    {% endfor %}
+    <a href="/sources">Sources</a>
+    <a href="/setup" class="dim">Setup</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

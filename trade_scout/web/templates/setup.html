@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Setup — Trade Scout{% endblock %}
+{% block content %}
+<h1>Setup</h1>
+<div class="panel">
+  <p class="dim">Enter your Sleeper username to find your leagues. Nothing is
+  sent anywhere except Sleeper's public API; the result is saved to a local
+  config file.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="stack" hx-post="/setup/lookup" hx-target="#leagues"
+        hx-indicator="#looking">
+    <label for="username">Sleeper username</label>
+    <input type="text" id="username" name="username" required
+           value="{{ username or '' }}" autocomplete="off">
+    <button type="submit">Find my leagues</button>
+    <span id="looking" class="htmx-indicator dim">looking…</span>
+  </form>
+</div>
+<div id="leagues"></div>
+{% endblock %}

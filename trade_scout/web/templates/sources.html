@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Sources — Trade Scout{% endblock %}
+{% block content %}
+<h1>Value sources</h1>
+<div class="panel scroll">
+  <table>
+    <tr><th>Source</th><th>Status</th><th>As of</th>
+        <th class="num">Players</th><th class="num">Picks</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.display_name }}</td>
+      <td>
+        {% if not r.enabled %}<span class="pill off">disabled</span>
+        {% elif r.ok %}<span class="pill on">live</span>
+          {% if r.stale %}<span class="pill stale">stale</span>{% endif %}
+        {% else %}<span class="pill off">failed</span>{% endif %}
+      </td>
+      <td class="dim">{{ r.as_of or '' }}</td>
+      <td class="num">{{ r.players or '' }}</td>
+      <td class="num">{{ r.picks or '' }}</td>
+      <td class="dim">{{ r.error or '' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="panel">
+  <p>Flock Fantasy (second opinion, never votes):
+    {% if flock_configured %}<span class="pill on">credentials set</span>
+    {% else %}<span class="pill off">not configured</span>
+    <span class="dim">— set FLOCK_EMAIL / FLOCK_PASSWORD in .env to enable
+    </span>{% endif %}</p>
+  <p>AI extras (natural-language input, idea generation, prose verdicts):
+    {% if llm_on %}<span class="pill on">on</span>
+    {% else %}<span class="pill off">off</span>
+    <span class="dim">— install and authenticate the claude CLI to enable
+    </span>{% endif %}</p>
+</div>
+{% endblock %}

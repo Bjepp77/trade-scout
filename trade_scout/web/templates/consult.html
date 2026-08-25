@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Trade ideas — {{ league.short }}{% endblock %}
+{% block content %}
+<h1>Trade ideas <span class="dim">({{ league.name }})</span></h1>
+<div class="panel">
+  <p class="dim">Describe the situation, e.g.
+    <code>Mike wants Caleb Williams</code> or
+    <code>trades I could do with Sarah if I give her Bijan</code>.
+    Candidates are generated, then every one is re-priced by the engine
+    against all sources; only priceable, non-losing options come back.</p>
+  <form class="stack" hx-post="/league/{{ league.short }}/consult"
+        hx-target="#consult-result">
+    <label for="text">Request</label>
+    <input type="text" id="text" name="text" required autocomplete="off">
+    <button type="submit">Find options</button>
+  </form>
+</div>
+<div id="consult-result"></div>
+{% endblock %}
