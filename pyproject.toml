@@ -1,0 +1,42 @@
+[project]
+name = "trade-scout"
+version = "0.2.0"
+description = "Local dynasty fantasy football trade evaluator with multi-source consensus"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "rapidfuzz>=3.0",
+]
+
+[project.scripts]
+trade-scout = "trade_scout.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pyright>=1.1",
+    "ruff>=0.4",
+    "pytest-asyncio>=0.23",
+]
+flock = [
+    "playwright>=1.40",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["trade_scout/tests"]
+pythonpath = ["."]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = ["trade_scout"]
+exclude = ["trade_scout/tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
