@@ -754,7 +754,7 @@ def _format_reply(
     flock_calc_results: list[dict] | None = None,
     league_name: str | None = None,
 ) -> str:
-    """Format the 3 trade skeletons into a Telegram-ready reply."""
+    """Format the ranked trade options into a text reply."""
     lines: list[str] = []
     lines.append(
         f"Trade options giving {constraint.target_display} "

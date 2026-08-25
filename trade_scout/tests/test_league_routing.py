@@ -127,6 +127,6 @@ class TestTheDisagreeingCells:
         assert "DD" in msg and "CL" in msg
 
     def test_no_selector_still_honours_an_explicit_text_token(self, env):
-        # The Telegram path has no selector and must keep working.
+        # A text-only caller has no selector and must keep working.
         seen, _ = self._run(env, "CL give: Bijan Robinson | get: Puka Nacua", None)
         assert seen.get("league_id") == CL_ID

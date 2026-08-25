@@ -683,7 +683,7 @@ def format_basis_line(source: str, as_of: str, format_str: str,
     """Format the basis line per the invariant (section 2).
 
     The league is stated FIRST because it is the fact that decides whether the
-    rest of the line means anything. A Telegram reply has no chip and no
+    rest of the line means anything. A plain text reply has no chip and no
     heading; this line is the only place the league can ever appear, and for a
     long time nothing in the output named it at all.
     """

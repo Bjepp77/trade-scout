@@ -11,7 +11,7 @@ join it needs is one the engine already knows how to do:
       + get_values()      (the SAME provider chain /trade prices with)
 
 Doing that join in JavaScript would mean a second opinion about what a player
-is worth, and two opinions about value is how the console and the Telegram bot
+is worth, and two opinions about value is how the board and the trade verdict
 start disagreeing about the same trade. So it happens here, once.
 
 The Sleeper players map is 14.6 MB and Sleeper asks that it be fetched at most
