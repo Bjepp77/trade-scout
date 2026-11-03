@@ -9,20 +9,17 @@ calculator's opinion is a data point. Four of them disagreeing is the real answe
 
 `uv run trade-scout serve` for the web UI · `uv run trade-scout eval` from the terminal
 
-<sub>MIT licensed · Python 3.12+ · runs on your machine · no accounts, no server, no database</sub>
+<sub>MIT licensed · Python 3.12+ · no accounts, no server, no database</sub>
 
 </div>
 
 <br>
 
-```
-FantasyCalc     give   10,071 | get   13,226 |   +3,155 (23.9%) WIN   as of 2026-08-24
-DynastyProcess  give    7,995 | get    9,445 |   +1,450 (15.4%) WIN   as of 2026-08-21
-KeepTradeCut    give    9,999 | get   15,535 |   +5,536 (35.6%) WIN   as of 2026-08-24
-Dynasty Daddy   give    9,998 | get   15,481 |   +5,483 (35.4%) WIN   as of 2026-08-24
-Consensus: wins under 4 of 4 sources (gate: majority -> PASS)
-```
-<div align="center"><sub>An example verdict. Each row is priced on that source's own scale.</sub></div>
+<div align="center">
+  <img src="docs/img/web-trade.png" width="880" alt="The Trade Scout web UI pricing a trade under four sources">
+  <br>
+  <sub>The trade page. Sample data: every value in this image is made up.</sub>
+</div>
 
 <br>
 
@@ -41,8 +38,6 @@ can't be matched, he is named, never quietly priced at zero.
 It also has optional AI help, with one hard rule: **the engine owns the
 numbers.** Anything an LLM proposes is re-priced by code before you see it.
 
-## Value sources
-
 | Source | Basis | Access |
 |:--|:--|:--|
 | [FantasyCalc](https://fantasycalc.com) | real completed dynasty trades | open API |
@@ -52,47 +47,7 @@ numbers.** Anything an LLM proposes is re-priced by code before you see it.
 
 Draft picks are priced from each source's own pick sheet.
 
-## Features
-
-- **Trade evaluator.** Enter both sides. Get the per-source verdict table, a
-  consensus banner and a per-asset breakdown.
-- **Trade ideas.** Name a player you want from a league-mate. Candidate
-  packages are built from the partner's roster, every one is re-priced by the
-  engine against all sources, and only priceable, non-losing options come
-  back, labelled BEST DEAL / FAIR DEAL / STRETCH by their measured deltas.
-- **Roster board.** Every roster in the league priced and scored, with
-  per-source values kept visible.
-- **Sources page.** Which calculators are live, how fresh they are, and what failed.
-- **Consensus gate.** `all`, `majority` or `any`, with an even band so a
-  0.2% edge does not cast a vote. Default: majority, 3% even band.
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[Sleeper<br>rosters and picks] --> D
-    B[Value sources<br>fetched concurrently] --> C[Name resolution<br>to Sleeper IDs]
-    C --> D[evaluate.py<br>price per source, raw scale]
-    D --> E[Consensus gate<br>all / majority / any]
-    D --> F[Composite<br>for sorting only]
-    E --> G[Verdict<br>with basis and dates]
-    H[LLM or enumerator<br>proposes structure] --> D
-```
-
-**Scale discipline.** Sources publish on very different scales. At the
-median, KeepTradeCut's number is about 2.3x FantasyCalc's for the same player.
-So each verdict row uses one source's raw values only. A composite exists for
-sorting: it maps every source onto one reference curve by rank, then blends
-with set weights. The rows are the truth; the composite is a convenience.
-
-**The consult loop.** Whatever proposes a trade, an LLM or a plain
-enumerator, proposes structure only. Every candidate goes back through the
-same `evaluate_trade` code. This is load-bearing: an earlier design let the
-LLM write its own value delta, and nothing checked it.
-
-The full architecture is in [docs/DESIGN.md](docs/DESIGN.md).
-
-## Quick start
+## Install
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
@@ -100,66 +55,167 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 git clone https://github.com/Bjepp77/trade-scout.git
 cd trade-scout
 uv sync
-uv run trade-scout setup     # your Sleeper username, then pick your leagues
-uv run trade-scout serve     # open http://127.0.0.1:8177
+uv run trade-scout setup
 ```
 
-Or from the terminal:
+`setup` asks for your Sleeper username, lists your leagues by number, and asks
+for a short name for each league you pick. It saves them to
+`~/.trade-scout/config.json`, outside the repo.
+
+| Optional extra | Adds |
+|:--|:--|
+| `uv sync --extra dev` | pytest, ruff and pyright for development. |
+| `uv sync --extra flock` | Flock Fantasy as a side-by-side second opinion. See below. |
+
+## Usage
 
 ```sh
-uv run trade-scout eval DD "give: Bijan Robinson | get: Jahmyr Gibbs, 2027 1st"
-uv run trade-scout rosters   # full priced roster board as JSON
+uv run trade-scout serve       # web UI at http://127.0.0.1:8177
+uv run trade-scout eval DEMO "give: Bijan Robinson | get: Jahmyr Gibbs, 2027 1st"
+uv run trade-scout rosters     # every roster in the league, priced, as JSON
 ```
 
-`DD` is whatever short name you gave your league during setup. Your league
-config is saved to `~/.trade-scout/config.json`, outside the repo.
+<div align="center">
+  <img src="docs/img/cli-eval.png" width="880" alt="trade-scout eval output in a terminal">
+  <br>
+  <sub>The same trade from the terminal. Sample data: every value is made up.</sub>
+</div>
 
-## Optional extras
+<br>
 
-**AI assist.** If the [Claude Code CLI](https://claude.com/claude-code)
-(`claude`) is installed and signed in, you also get plain-English trade input
-("my CMC and a 2027 1st for Bijan"), AI-drafted trade ideas and a prose
-verdict. Without it, everything above still works: a structured grammar, a
-deterministic idea enumerator and a numeric summary stand in.
+`DEMO` stands for whatever short name you gave your league in `setup`. There is
+no default league: `eval` refuses to run without a short name it knows.
 
-**Flock Fantasy.** If you have a Flock account, its rankings and trade
-calculator can sit beside the verdict as a second opinion. It is never
-blended in and never votes. It uses your own login through a headless
-browser. Copy `.env.example` to `.env`, fill in the two Flock fields, then
-run `uv sync --extra flock && uv run playwright install chromium`.
+**Trade grammar.** `give: A, B | get: C, 2027 1st`. A leading `/trade` and a
+leading league short name are both accepted. Picks can be written as
+`2027 1st`, `2027 Early 1st`, `2027 1st (Early)` or `2026 1.03`. A future pick
+with no tier is priced at mid tier, and the result says so, for example
+`(mid tier (no tier given))`.
+
+**Trade ideas.** Start the text with `consult`, or write something like
+"he wants my ..." or "trades I could do with ...". Candidate packages are built
+from the partner's roster, each one is re-priced against every source, and only
+priceable, non-losing options come back, labelled BEST DEAL, FAIR DEAL or
+STRETCH by their measured deltas.
+
+**Web UI.** `serve` gives you the trade page, a roster board, a sources page
+(which calculators are live, how fresh they are, what failed) and a setup page.
+Use `--port` and `--host` to change where it listens.
+
+**Terminal output.** `eval` always prints `TRADE_SCOUT_PRICED_AS>>><SHORT>` as
+its first stdout line, so a script can tell which league was priced. Log lines
+go to stderr.
+
+**AI assist (optional).** If the [Claude Code CLI](https://claude.com/claude-code)
+(`claude`) is installed and signed in, you also get plain-English trade input,
+AI-drafted trade ideas and a prose verdict. Set `TRADE_SCOUT_LLM=off` to turn
+it off. Without it, the structured grammar, a deterministic idea enumerator and
+a numeric `Composite:` summary stand in.
+
+**Flock Fantasy (optional).** If you have a Flock account, its rankings and
+trade calculator sit beside the verdict as a second opinion. Flock never votes
+and is never blended in. It logs in as you through a headless browser. Copy
+`.env.example` to `.env`, fill in the Flock fields, then run
+`uv sync --extra flock && uv run playwright install chromium`. Flock
+credentials are read only from the environment or `.env` (gitignored), never
+from the config file.
+
+## How the verdict works
+
+1. **One row per source, on its own scale.** Sources publish on very different
+   scales. At the median, KeepTradeCut's number is about 2.3x FantasyCalc's for
+   the same player, so no row mixes sources.
+2. **Each row casts a vote.** A row is WIN, LOSS or EVEN. A gap inside the even
+   band (3% by default) is EVEN, so a 0.2% edge does not count as a win.
+3. **The gate decides.** `all`, `any`, or `majority` (the default: more than
+   half of the sources that can vote).
+4. **Stale sources sit out.** A source older than its limit (DynastyProcess
+   10 days, Dynasty Daddy 3 days) is shown but does not vote, by default.
+5. **Nothing is hidden.** Players or picks that could not be priced are named
+   ("couldn't price: ..."), and failed sources are listed as
+   "unavailable: <reason>".
+
+The **composite** maps every source onto one reference curve by rank, then
+blends them. It is for sorting only and never decides the verdict.
+
+Gate, even band and stale handling live under `consensus` in
+`~/.trade-scout/config.json` (`gate`, `even_band_pct`, `exclude_stale`). The
+full architecture is in [docs/DESIGN.md](docs/DESIGN.md).
+
+## Privacy
+
+Trade Scout runs on your machine. There is no account and no server of ours.
+It calls only these hosts:
+
+| Host | Why |
+|:--|:--|
+| `api.sleeper.app` | your leagues, rosters, picks and the player map |
+| `api.fantasycalc.com` | FantasyCalc values |
+| `keeptradecut.com` | KeepTradeCut values |
+| `raw.githubusercontent.com/dynastyprocess` | DynastyProcess CSVs |
+| `dynasty-daddy.com` | Dynasty Daddy values |
+| `flockfantasy.com` | only if you set Flock credentials |
+
+If AI assist is on, your trade text goes through the `claude` CLI under your
+own Claude account.
+
+Local files, all outside the repo:
+
+| Path | Holds | Override |
+|:--|:--|:--|
+| `~/.trade-scout/config.json` | your Sleeper username and leagues | `TRADE_SCOUT_CONFIG` |
+| `~/.trade-scout/cache/` | fetched values | `TRADE_SCOUT_CACHE_DIR` (empty disables) |
+| `~/.trade-scout/history/` | daily value snapshots from the roster board | `TRADE_SCOUT_HISTORY_DIR` (empty disables) |
+
+Values are cached so sources are hit rarely: FantasyCalc and KeepTradeCut
+30 minutes, Dynasty Daddy 6 hours, DynastyProcess 24 hours, the Sleeper player
+map 20 hours, Flock rankings 6 hours.
+
+## Security note
+
+The web UI has **no login, by design**. Anyone who can reach the port can use
+it and see your league data. It listens on `127.0.0.1` by default. Keep it
+there. Do not pass `--host 0.0.0.0`, and do not expose the port to a network,
+a tunnel or the internet.
+
+## When something breaks
+
+| Symptom | Fix |
+|:--|:--|
+| `eval` refuses to run | Give it a league short name from `setup`, or run `setup` again. |
+| A source shows "unavailable" | That source failed or changed. The verdict runs on the rest. KeepTradeCut is a page scrape and Dynasty Daddy is an unofficial API, so either can break without notice. |
+| A source is shown but does not vote | It is stale. Check its as-of date on the sources page. |
+| "couldn't price: ..." | The name did not match a player. Check the spelling. |
+| Wrong league id | Set `SLEEPER_LEAGUE_<SHORT>` to override the id for that short name. |
+| Odd or old values | Clear `~/.trade-scout/cache/`, or set `TRADE_SCOUT_CACHE_DIR=` to skip the cache. |
+| No AI features | Install and sign in to the `claude` CLI, and check `TRADE_SCOUT_LLM` is not `off`. |
 
 ## Development
 
 ```sh
 uv sync --extra dev
-uv run pytest -q       # hermetic: the suite never touches the network
+uv run pytest -q
 uv run ruff check
 uv run pyright
 ```
 
-The test suite is hermetic. An autouse guard makes every provider fetch and
-raw HTTP call raise, and masks your real `.env`, config and `claude` CLI. CI
-on GitHub Actions runs lint, type checks and tests on every push
-(`.github/workflows/ci.yml`).
+The test suite is hermetic. An autouse guard makes every provider fetch and raw
+HTTP call raise, and masks your real `.env`, config and `claude` CLI. CI on
+GitHub Actions runs lint, type checks and tests on every push and pull request
+([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-## Tech stack
+Built with FastAPI, Jinja2 and vendored htmx for the web UI, httpx for
+fetching, rapidfuzz for name matching, and optional Playwright for Flock.
 
-Python 3.12, FastAPI, Jinja2 and vendored htmx for the local web UI. httpx
-for fetching, rapidfuzz for name matching. Optional Playwright for Flock.
-uv for packaging, pytest, ruff and pyright for checks.
+## Requirements
 
-## Status and limits
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- A [Sleeper](https://sleeper.com) account with at least one dynasty league
+- Optional: the `claude` CLI for AI assist, a Flock Fantasy account for Flock
 
-- **v0.2.0**, per `pyproject.toml`.
-- KeepTradeCut is a page scrape and Dynasty Daddy is an unofficial API. Either
-  can change or disappear. If one does, the tool drops it and says so.
-- Values are fetched politely: cached, low frequency, public endpoints.
-- Built for personal use. Sleeper is the only league platform supported.
-
-## Disclaimer
-
-Not affiliated with Sleeper, FantasyCalc, DynastyProcess, KeepTradeCut,
-Dynasty Daddy or Flock.
+Sleeper is the only league platform supported. Version 0.2.0. Built for
+personal use. Not affiliated with Sleeper, FantasyCalc, DynastyProcess,
+KeepTradeCut, Dynasty Daddy or Flock.
 
 ## License
 
